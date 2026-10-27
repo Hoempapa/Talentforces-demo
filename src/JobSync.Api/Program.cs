@@ -3,6 +3,9 @@ using System.Threading.RateLimiting;
 using JobSync.Api.Ats;
 using JobSync.Api.Components;
 using JobSync.Api.Domain;
+using JobSync.Api.JobBoards;
+using JobSync.Api.JobBoards.MockJobBoard;
+using JobSync.Api.Sync;
 using Microsoft.Extensions.Http.Resilience;
 using Polly;
 
@@ -53,6 +56,43 @@ else
     builder.Services.AddSingleton<IAtsRepository, InMemoryAtsRepository>();
 }
 
+// ---------------------------------------------------------------------------
+// Vacatureplatform: MockJobBoard. Een echte VDAB-client registreer je hier in de plaats.
+// ---------------------------------------------------------------------------
+builder.Services.Configure<MockJobBoardOptions>(builder.Configuration.GetSection(MockJobBoardOptions.Sectie));
+var mockJobBoard = builder.Configuration.GetSection(MockJobBoardOptions.Sectie).Get<MockJobBoardOptions>() ?? new();
+
+builder.Services.AddHttpClient(MockJobBoardTokenProvider.HttpClientNaam, c => c.BaseAddress = new Uri(mockJobBoard.BaseUrl))
+    .AddStandardResilienceHandler();
+builder.Services.AddSingleton<MockJobBoardTokenProvider>();
+builder.Services.AddTransient<MockJobBoardAuthHandler>();
+
+var jobBoardHttp = builder.Services.AddHttpClient<IJobBoardClient, MockJobBoardClient>(c => c.BaseAddress = new Uri(mockJobBoard.BaseUrl));
+jobBoardHttp
+    // Buitenste laag: standaard resilience (retry met exponential backoff + jitter, respecteert Retry-After,
+    // circuit breaker, time-outs). Retries op 5xx, 408, 429 en netwerkfouten.
+    .AddStandardResilienceHandler()
+    .Configure((o, sp) =>
+    {
+        var log = sp.GetRequiredService<SyncLog>();
+        o.Retry.OnRetry = args =>
+        {
+            var reden = args.Outcome.Result is { } r ? $"HTTP {(int)r.StatusCode}" : args.Outcome.Exception?.GetType().Name;
+            log.Waarschuwing($"Tijdelijke fout ({reden}), poging {args.AttemptNumber + 2} over {args.RetryDelay.TotalSeconds:0.#} s.");
+            return ValueTask.CompletedTask;
+        };
+    });
+// Binnenste laag: Bearer-token toevoegen (elke retry krijgt zo een geldig token).
+jobBoardHttp.AddHttpMessageHandler<MockJobBoardAuthHandler>();
+
+// ---------------------------------------------------------------------------
+// Sync: handmatig (dashboard) en periodiek (BackgroundService)
+// ---------------------------------------------------------------------------
+builder.Services.Configure<SyncOptions>(builder.Configuration.GetSection(SyncOptions.Sectie));
+builder.Services.AddSingleton<SyncLog>();
+builder.Services.AddSingleton<SyncService>();
+builder.Services.AddHostedService<SyncBackgroundService>();
+
 var app = builder.Build();
 
 if (!airtable.IsGeconfigureerd)
@@ -65,6 +105,13 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 
 app.UseAntiforgery();
+
+// Sync starten via HTTP, bv. vanuit een Zapier-webhook wanneer een record in Airtable wijzigt.
+// Demo: geen authenticatie. In productie: API-key of HMAC-handtekening.
+app.MapPost("/api/sync", async (SyncService sync, CancellationToken ct) =>
+    await sync.SynchroniseerAsync("api", ct) is { } rapport
+        ? Results.Ok(rapport)
+        : Results.Conflict(new { melding = "Er loopt al een sync." }));
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
