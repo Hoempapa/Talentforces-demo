@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/JobSync.Api/JobSync.Api.csproj" />
+    <Project Path="src/MockJobBoard.Api/MockJobBoard.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/JobSync.Tests/JobSync.Tests.csproj" />
+  </Folder>
+</Solution>
