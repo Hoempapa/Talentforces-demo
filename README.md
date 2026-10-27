@@ -115,7 +115,11 @@ lopende sync bij de volgende ronde alsnog meegaat.
 
 ### 1. Airtable klaarzetten
 
-Maak een base met een tabel **`Vacatures`** en deze velden:
+Volg **[docs/airtable-setup.md](docs/airtable-setup.md)**: een gratis account, de tabel
+importeren uit [`docs/airtable/Vacatures.csv`](docs/airtable/Vacatures.csv), de veldtypes
+instellen en een personal access token aanmaken. Dat duurt ongeveer 15 minuten.
+
+Kort samengevat: tabel **`Vacatures`** met deze velden.
 
 | Veld | Type | Opmerking |
 |---|---|---|
@@ -129,9 +133,12 @@ Maak een base met een tabel **`Vacatures`** en deze velden:
 | SyncFout | Long text | ingevuld door JobSync |
 | GewijzigdOp | Last modified time | **Specific fields:** Titel, Omschrijving, Locatie, Contracttype, Status |
 
-Maak een **personal access token** aan via <https://airtable.com/create/tokens> met de
-scopes `data.records:read` en `data.records:write`, en geef het enkel toegang tot deze base.
-De base-id (begint met `app…`) staat in de URL van de base.
+Het token heeft enkel de scopes `data.records:read` en `data.records:write` nodig, en enkel
+toegang tot deze base.
+
+> **Gratis plan: 1.000 API-calls per maand.** De automatische sync draait daarom elke
+> 15 minuten, het dashboard leest Airtable maar één keer per paginalading, en het telt de
+> gebruikte calls. Zie [Limieten van het gratis plan](docs/airtable-setup.md#limieten-van-het-gratis-plan).
 
 ### 2. Secrets instellen (user-secrets, nooit in de repo)
 
@@ -157,7 +164,7 @@ dotnet run --project src/MockJobBoard.Api     # http://localhost:5200
 dotnet run --project src/JobSync.Api          # http://localhost:5100  (dashboard)
 ```
 
-Open <http://localhost:5100> en klik op **Sync nu**. Daarnaast draait er elke 5 minuten
+Open <http://localhost:5100> en klik op **Sync nu**. Daarnaast draait er elke 15 minuten
 een automatische sync (`Sync:IntervalSeconden` in `appsettings.json`).
 
 Handig om te weten:
@@ -175,6 +182,8 @@ Handig om te weten:
   de `ExternId`-velden leeg om opnieuw te publiceren.
 
 ### Demoscenario (± 5 minuten)
+
+Zet Airtable en het dashboard naast elkaar op het scherm.
 
 1. Zet een vacature op **Gepubliceerd**, klik **Sync nu**: ze krijgt een ExternId.
 2. Pas de titel aan in Airtable: de kolom "Volgende actie" toont *Aanpassen*; sync.

@@ -1,5 +1,6 @@
 @page "/"
-@rendermode InteractiveServer
+@* Geen prerendering: anders wordt Airtable bij elke paginalading twee keer gelezen. *@
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @implements IDisposable
 @using JobSync.Api.JobBoards
 @using Microsoft.Extensions.Options
@@ -9,6 +10,7 @@
 @inject SyncLog Log
 @inject IOptions<AirtableOptions> AirtableOpties
 @inject IOptions<SyncOptions> SyncOpties
+@inject AirtableVerbruik Verbruik
 
 <PageTitle>JobSync – dashboard</PageTitle>
 
@@ -32,7 +34,13 @@
 
 <section class="meta">
     <span>Laatste sync: <strong>@(Sync.LaatsteRun?.ToString("dd/MM/yyyy HH:mm:ss") ?? "nog niet")</strong></span>
-    <span>Automatisch: <strong>@(SyncOpties.Value.Automatisch ? $"elke {SyncOpties.Value.IntervalSeconden} s" : "uit")</strong></span>
+    <span>Automatisch: <strong>@(SyncOpties.Value.Automatisch ? $"elke {SyncOpties.Value.IntervalSeconden / 60} min" : "uit")</strong></span>
+    @if (AirtableOpties.Value.IsGeconfigureerd)
+    {
+        <span title="Echte HTTP-calls naar Airtable sinds opstart, inclusief retries. Gratis plan: 1.000 per maand.">
+            Airtable-calls: <strong>@Verbruik.Aantal</strong>
+        </span>
+    }
     @if (_rapport is { } r)
     {
         <span class="rapport">

@@ -30,7 +30,7 @@ public class AirtableMappingTests
             new SyncTerugkoppeling("recA", "MJB-1", new DateTimeOffset(2026, 10, 27, 10, 0, 0, TimeSpan.FromHours(1)), null));
 
         Assert.Equal("MJB-1", update.Fields["ExternId"]);
-        Assert.Equal("2026-10-27T09:00:00.0000000Z", update.Fields["LaatsteSync"]);
+        Assert.Equal("2026-10-27T09:00:00.000Z", update.Fields["LaatsteSync"]);
         Assert.True(update.Fields.ContainsKey("SyncFout"));
         Assert.Null(update.Fields["SyncFout"]);
     }
@@ -43,4 +43,11 @@ public class AirtableMappingTests
         Assert.Equal(["SyncFout"], update.Fields.Keys);
         Assert.Equal("Kapot", update.Fields["SyncFout"]);
     }
+
+    [Theory]
+    [InlineData(422, "{\"error\":{\"type\":\"UNKNOWN_FIELD_NAME\"}}", "veld ontbreekt")]
+    [InlineData(403, "{}", "data.records:read")]
+    [InlineData(404, "{}", "BaseId")]
+    public void Geeft_bruikbare_tip_bij_setupfouten(int status, string body, string verwacht) =>
+        Assert.Contains(verwacht, AirtableClient.Tip((System.Net.HttpStatusCode)status, body));
 }

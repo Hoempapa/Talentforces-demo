@@ -1,4 +1,6 @@
 using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 using JobSync.Api.Domain;
 using Microsoft.Extensions.Options;
 
@@ -52,7 +54,11 @@ public class AirtableClient(HttpClient http, IOptions<AirtableOptions> options, 
         foreach (var batch in terugkoppelingen.Chunk(MaxRecordsPerUpdate))
         {
             var body = new AirtableUpdate(batch.Select(NaarUpdateRecord).ToList());
-            using var request = new HttpRequestMessage(HttpMethod.Patch, TabelUrl) { Content = JsonContent.Create(body) };
+            // Gebufferde body met vaste Content-Length (geen chunked encoding), veilig om opnieuw te versturen bij een retry.
+            using var request = new HttpRequestMessage(HttpMethod.Patch, TabelUrl)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json")
+            };
             Authenticeer(request);
 
             using var response = await http.SendAsync(request, ct);
@@ -78,7 +84,7 @@ public class AirtableClient(HttpClient http, IOptions<AirtableOptions> options, 
         // SyncFout altijd meesturen: null wist een oude fout na een geslaagde sync.
         var velden = new Dictionary<string, object?> { ["SyncFout"] = t.SyncFout };
         if (t.ExternId is not null) velden["ExternId"] = t.ExternId;
-        if (t.LaatsteSync is not null) velden["LaatsteSync"] = t.LaatsteSync.Value.UtcDateTime.ToString("O");
+        if (t.LaatsteSync is not null) velden["LaatsteSync"] = t.LaatsteSync.Value.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", System.Globalization.CultureInfo.InvariantCulture);
         return new AirtableUpdateRecord(t.RecordId, velden);
     }
 
@@ -89,6 +95,20 @@ public class AirtableClient(HttpClient http, IOptions<AirtableOptions> options, 
     {
         if (response.IsSuccessStatusCode) return;
         var body = await response.Content.ReadAsStringAsync(ct);
-        throw new HttpRequestException($"Airtable-fout bij {actie}: {(int)response.StatusCode} {body}", null, response.StatusCode);
+        throw new HttpRequestException(
+            $"Airtable-fout bij {actie}: {(int)response.StatusCode}. {Tip(response.StatusCode, body)} ({body})", null, response.StatusCode);
     }
+
+    /// <summary>Veelvoorkomende setupfouten vertalen naar een concrete tip.</summary>
+    internal static string Tip(System.Net.HttpStatusCode status, string body) => (int)status switch
+    {
+        401 => "Token ongeldig. Controleer Airtable:Token in user-secrets.",
+        403 => "Geen toegang. Geef het token de scopes data.records:read en data.records:write, en toegang tot deze base.",
+        404 => "Base of tabel niet gevonden. Controleer Airtable:BaseId (begint met 'app') en de tabelnaam 'Vacatures'.",
+        422 when body.Contains("UNKNOWN_FIELD_NAME") => "Een veld ontbreekt of heeft een andere naam. Vergelijk met docs/airtable-setup.md (hoofdlettergevoelig).",
+        422 when body.Contains("INVALID_VALUE_FOR_COLUMN") => "Verkeerd veldtype. LaatsteSync moet een Date-veld met tijd zijn, ExternId en SyncFout tekst.",
+        429 when body.Contains("BILLING_LIMIT") => "Maandlimiet van API-calls van je Airtable-plan bereikt.",
+        429 => "Te veel requests per seconde.",
+        _ => ""
+    };
 }

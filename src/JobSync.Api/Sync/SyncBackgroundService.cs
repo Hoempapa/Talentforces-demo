@@ -7,7 +7,7 @@ public class SyncOptions
     public const string Sectie = "Sync";
 
     public bool Automatisch { get; set; } = true;
-    public int IntervalSeconden { get; set; } = 300;
+    public int IntervalSeconden { get; set; } = 900;
 }
 
 /// <summary>Start periodiek een sync. De handmatige knop op het dashboard gebruikt dezelfde SyncService.</summary>
