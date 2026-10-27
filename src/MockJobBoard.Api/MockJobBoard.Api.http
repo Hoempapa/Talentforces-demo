@@ -1,0 +1,44 @@
+# Handmatig testen van de mock (VS Code REST Client / Rider / Visual Studio).
+@base = http://localhost:5200
+
+### 1. Token ophalen (client credentials)
+# @name token
+POST {{base}}/oauth/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id=jobsync-demo&client_secret=mock-secret-niet-echt
+
+### 2. Vacature publiceren
+# @name publiceer
+POST {{base}}/vacatures
+Authorization: Bearer {{token.response.body.access_token}}
+Content-Type: application/json
+
+{
+  "referentie": "recDEMO123",
+  "functietitel": "Backend developer .NET",
+  "beschrijving": "Je bouwt mee aan integraties tussen ons ATS en vacatureplatformen.",
+  "werkplaats": { "gemeente": "Gent", "postcode": "9000" },
+  "contract": "VAST"
+}
+
+### 3. Validatiefout (titel te lang, contract onbekend)
+POST {{base}}/vacatures
+Authorization: Bearer {{token.response.body.access_token}}
+Content-Type: application/json
+
+{
+  "referentie": "recDEMO999",
+  "functietitel": "Een veel te lange titel die ruim over de limiet van tachtig tekens gaat, zodat de mock klaagt",
+  "beschrijving": "Kort",
+  "werkplaats": { "gemeente": "" },
+  "contract": "BIJBAAN"
+}
+
+### 4. Afsluiten
+POST {{base}}/vacatures/{{publiceer.response.body.id}}/afsluiten
+Authorization: Bearer {{token.response.body.access_token}}
+
+### 5. Overzicht
+GET {{base}}/vacatures
+Authorization: Bearer {{token.response.body.access_token}}

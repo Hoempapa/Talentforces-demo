@@ -1,0 +1,61 @@
+:root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --text: #1d2330;
+    --muted: #677085;
+    --border: #e3e6ec;
+    --accent: #3157d5;
+    --ok: #18794e;
+    --ok-bg: #e3f5ec;
+    --warn: #9a5b00;
+    --warn-bg: #fff2d6;
+    --err: #b42318;
+    --err-bg: #fde8e6;
+    --neutral-bg: #eef0f4;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #12151c;
+        --surface: #1a1f29;
+        --text: #e6e9ef;
+        --muted: #9aa3b5;
+        --border: #2a3140;
+        --accent: #5b7cfa;
+        --ok: #4ccf8e;
+        --ok-bg: #173327;
+        --warn: #f2b35a;
+        --warn-bg: #3a2c12;
+        --err: #ff7b72;
+        --err-bg: #3d1a19;
+        --neutral-bg: #252b37;
+    }
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.45;
+}
+
+main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+h1:focus { outline: none; }
+
+.blazor-error-boundary {
+    background: #b32121;
+    padding: 1rem;
+    color: white;
+}
+
+.blazor-error-boundary::after {
+    content: "Er is een fout opgetreden.";
+}
