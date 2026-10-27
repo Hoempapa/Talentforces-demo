@@ -1,7 +1,148 @@
-﻿@page "/"
+@page "/"
+@rendermode InteractiveServer
+@implements IDisposable
+@using JobSync.Api.JobBoards
+@using Microsoft.Extensions.Options
+@inject IAtsRepository Ats
+@inject IJobBoardClient Platform
+@inject SyncService Sync
+@inject SyncLog Log
+@inject IOptions<AirtableOptions> AirtableOpties
+@inject IOptions<SyncOptions> SyncOpties
 
-<PageTitle>Home</PageTitle>
+<PageTitle>JobSync – dashboard</PageTitle>
 
-<h1>Hello, world!</h1>
+<header class="kop">
+    <div>
+        <h1>JobSync</h1>
+        <p class="sub">
+            Airtable <span class="pijl">→</span> @Platform.Naam
+            <span class="chip @(AirtableOpties.Value.IsGeconfigureerd ? "chip-ok" : "chip-demo")">
+                @(AirtableOpties.Value.IsGeconfigureerd ? "Airtable gekoppeld" : "Demo-modus: in-memory data")
+            </span>
+        </p>
+    </div>
+    <div class="acties">
+        <button class="knop knop-licht" @onclick="LaadAsync" disabled="@_laden">Vernieuwen</button>
+        <button class="knop" @onclick="SyncNuAsync" disabled="@(Sync.IsBezig)">
+            @(Sync.IsBezig ? "Bezig met sync…" : "Sync nu")
+        </button>
+    </div>
+</header>
 
-Welcome to your new app.
+<section class="meta">
+    <span>Laatste sync: <strong>@(Sync.LaatsteRun?.ToString("dd/MM/yyyy HH:mm:ss") ?? "nog niet")</strong></span>
+    <span>Automatisch: <strong>@(SyncOpties.Value.Automatisch ? $"elke {SyncOpties.Value.IntervalSeconden} s" : "uit")</strong></span>
+    @if (_rapport is { } r)
+    {
+        <span class="rapport">
+            <b class="ok">@r.Gepubliceerd</b> gepubliceerd ·
+            <b class="ok">@r.Aangepast</b> aangepast ·
+            <b class="ok">@r.Afgesloten</b> afgesloten ·
+            <b class="@(r.Fouten > 0 ? "fout" : "")">@r.Fouten</b> fouten
+        </span>
+    }
+</section>
+
+@if (_laadFout is not null)
+{
+    <div class="melding">Vacatures laden mislukt: @_laadFout</div>
+}
+
+<section class="kaart">
+    <h2>Vacatures <small>@_vacatures.Count</small></h2>
+    <div class="tabel-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Titel</th>
+                    <th>Status</th>
+                    <th>Volgende actie</th>
+                    <th>ExternId</th>
+                    <th>Laatste sync</th>
+                    <th>Fout</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var v in _vacatures)
+                {
+                    var actie = SyncBeslisser.Bepaal(v);
+                    <tr>
+                        <td>
+                            <div class="titel">@v.Titel</div>
+                            <div class="detail">@v.Locatie · @v.Contracttype</div>
+                        </td>
+                        <td><span class="badge status-@v.Status.ToString().ToLowerInvariant()">@v.Status</span></td>
+                        <td>@(actie == SyncActie.Geen ? "–" : actie.ToString())</td>
+                        <td><code>@(v.ExternId ?? "–")</code></td>
+                        <td class="nowrap">@(v.LaatsteSync?.ToLocalTime().ToString("dd/MM HH:mm:ss") ?? "–")</td>
+                        <td class="foutcel">@v.SyncFout</td>
+                    </tr>
+                }
+                @if (_vacatures.Count == 0 && !_laden)
+                {
+                    <tr><td colspan="6" class="leeg">Geen vacatures gevonden.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="kaart">
+    <h2>Log <small>laatste acties</small></h2>
+    <ul class="log">
+        @foreach (var regel in Log.Regels.Take(60))
+        {
+            <li class="log-@regel.Niveau.ToString().ToLowerInvariant()">
+                <time>@regel.Tijd.ToString("HH:mm:ss")</time>
+                <span>@regel.Bericht</span>
+            </li>
+        }
+        @if (Log.Regels.Count == 0)
+        {
+            <li class="leeg">Nog geen acties.</li>
+        }
+    </ul>
+</section>
+
+@code {
+    private IReadOnlyList<Vacature> _vacatures = [];
+    private SyncRapport? _rapport;
+    private string? _laadFout;
+    private bool _laden;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Live bijwerken wanneer de achtergrondsync of een andere gebruiker iets logt.
+        Log.Gewijzigd += OpLogGewijzigd;
+        await LaadAsync();
+    }
+
+    private async Task LaadAsync()
+    {
+        _laden = true;
+        try
+        {
+            _vacatures = await Ats.HaalVacaturesOpAsync();
+            _laadFout = null;
+        }
+        catch (Exception ex)
+        {
+            _laadFout = ex.Message;
+        }
+        finally
+        {
+            _laden = false;
+        }
+    }
+
+    private async Task SyncNuAsync()
+    {
+        _rapport = await Sync.SynchroniseerAsync("handmatig");
+        await LaadAsync();
+    }
+
+    private void OpLogGewijzigd() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Log.Gewijzigd -= OpLogGewijzigd;
+}
